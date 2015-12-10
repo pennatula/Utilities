@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Maps String ids to the corresponding Uniprot IDs
+ * Maps Gene ids to the corresponding Uniprot IDs
  * 
  * @author anwesha
  * 
@@ -28,7 +28,7 @@ public class matcher {
 			String inputFile = args[0];
 			String outputFile = args[1];
 			matcher wr = new matcher();
-			/*
+				/*
 				 * Find WP Reactome pairs
 				 * 
 				 */
