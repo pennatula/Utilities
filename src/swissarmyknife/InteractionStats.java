@@ -19,105 +19,103 @@ import org.bridgedb.IDMapper;
 import org.bridgedb.IDMapperException;
 import org.bridgedb.Xref;
 import org.pathvisio.core.model.ConverterException;
+import org.pathvisio.core.model.ObjectType;
 import org.pathvisio.core.model.Pathway;
+import org.pathvisio.core.model.PathwayElement;
+import org.pathvisio.core.model.PathwayElement.MAnchor;
 
 /**
- * Count interactions in analysis collections (curated + reactome) & all pathways
- * Check percentage annotated
+ * Count interactions in analysis collections (curated + reactome) & all
+ * pathways (Only connected interactions) Check percentage annotated
  * 
  * @author anwesha
  * 
  */
 public class InteractionStats {
-	private static Set<String> ENSEMBL_IDS;
-	DataSource ds = null;
+	private static int PathwayCount;
+	private static int InteractionCount;
+	private static int AnnotatedInteractionCount;
 
 	public static void main(String[] args) {
-		if (args.length == 4) {
+		if (args.length == 1) {
 			File inputPwyDir = new File(args[0]);
-			String outputFileGene = args[1];
-			String outputFileProt = args[2];
-			String bridgeFile = args[3];
 
 			InteractionStats wr = new InteractionStats();
 
 			/*
 			 * Setting up IDMapper
 			 */
-			try {
-				Class.forName("org.bridgedb.rdb.IDMapperRdb");
-				IDMapper mapper = BridgeDb.connect("idmapper-pgdb:"
-						+ bridgeFile);
-				wr.getEnsemblIds(inputPwyDir, outputFileGene, outputFileProt,
-						mapper);
-			} catch (ClassNotFoundException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IDMapperException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			}else{
+			wr.getNumInteractions(inputPwyDir);
+			System.out.println("Number of pathways = " + PathwayCount);
+			System.out.println("Number of connected interactions = "
+					+ InteractionCount);
+			System.out.println("Number of annotated interactions = "
+					+ AnnotatedInteractionCount);
+			} else {
 			System.out.println(args.length);
 		}
 	}
-		
-	private void getEnsemblIds(File inputPwyDir, String outputFileGene,
-			String outputFileProt, IDMapper mapper) {
+
+	private void getNumInteractions(File inputPwyDir) {
 		for (File pwyfile : inputPwyDir.listFiles()) {
 			Pathway pwy = new Pathway();
-			System.out.println(pwy.getMappInfo().getMapInfoName());
+			PathwayCount++;
+			// System.out.println(pwy.getMappInfo().getMapInfoName());
 			try {
 				pwy.readFromXml(pwyfile, false);
-				List<Xref> refs = pwy.getDataNodeXrefs();
-				
-				for (Xref ref : refs) {
-					ds = ref.getDataSource();
-					/*
-					 * Exclude metabolites
-					 */
-					if (!(ds == null || ds.getType().equalsIgnoreCase(
-							"metabolite"))) {
-//						countDatanodes = countDatanodes + 1;
-						/*
-						 * Id is not an Entrez gene id
-						 */
-						if (!ds.getSystemCode().equalsIgnoreCase("En")) {
-							Set<Xref> entrezId = mapper.mapID(ref,
-									DataSource.getBySystemCode("En"));
-							for (Xref eId : entrezId) {
-								ENSEMBL_IDS.add(eId.getId());
+
+				for (PathwayElement e : pwy.getDataObjects()) {
+					if (e.getObjectType() == ObjectType.LINE) {
+						if (isConnected(e, pwy, "start")) {
+							if (isConnected(e, pwy, "end")) {
+								InteractionCount++;
+								
+								if (e.getElementID() != null
+										& e.getDataSource() != null) {
+									AnnotatedInteractionCount++;
+								}
 							}
-						} else {
-							ENSEMBL_IDS.add(ref.getId());
 						}
-						}
+					}
 				}
-			} catch (NullPointerException e) {
-				e.printStackTrace();
 			} catch (ConverterException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
-			} catch (IDMapperException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
 		}
-		BufferedWriter brOutputGene;
-		try {
-			brOutputGene = new BufferedWriter(new FileWriter(outputFileGene));
-			Iterator<String> it = ENSEMBL_IDS.iterator();
-			while (it.hasNext()) {
-				brOutputGene.write(it.next() + "\n");
+	}
+
+	private boolean isConnected(PathwayElement e, Pathway pwy, String side) {
+		boolean connected = false;
+		String nodeRef = "";
+		if (side.equalsIgnoreCase("start")) {
+			nodeRef = e.getStartGraphRef();
+		} else {
+			nodeRef = e.getEndGraphRef();
+		}
+		for (PathwayElement e1 : pwy.getDataObjects()) {
+			if (e1.getGraphId() != null && nodeRef != null) {
+				if (e1.getObjectType() == ObjectType.DATANODE) {
+					// System.out.println("Node ref "+nodeRef);
+					// System.out.println("graphid "+e1.getGraphId());
+					if (nodeRef.equalsIgnoreCase(e1.getGraphId())) {
+						connected = true;
+					}
+				}else if(e1.getObjectType() == ObjectType.LINE){
+					for( MAnchor anchor : e1.getMAnchors()){
+						if (nodeRef.equalsIgnoreCase(anchor.getGraphId())) {
+							connected = true;
+						}
+					}
+				}
 			}
-			brOutputGene.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		}
-		}
+		return connected;
+	}
 
 	public InteractionStats() {
-		ENSEMBL_IDS = new HashSet<String>();
-		}
+		InteractionCount = 0;
+		AnnotatedInteractionCount = 0;
+		PathwayCount = 0;
+	}
 }
